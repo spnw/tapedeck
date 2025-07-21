@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RenoiseScriptingTool doc_version="0">
+  <ApiVersion>6.2</ApiVersion>
+  <Id>org.plexwave.TapeDeck</Id>
+  <Version>0.1.0</Version>
+  <Author>Spencer Williams [spnw@plexwave.org]</Author>
+  <Name>TapeDeck</Name>
+  <Category>Recording</Category>
+  <Description>Shortcuts for audio recording and monitoring.</Description>
+  <Homepage></Homepage>
+  <Icon></Icon>
+  <Platform>Windows, Mac, Linux</Platform>
+</RenoiseScriptingTool>
