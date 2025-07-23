@@ -2,6 +2,10 @@
 
 local util = {}
 
+function util.round(n)
+  return math.floor(n + 0.5)
+end
+
 function util.merge_tables(a, b)
   local new = table.copy(a)
   for k, v in pairs(b) do
