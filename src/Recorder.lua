@@ -2,6 +2,58 @@ local util = require "src/util"
 
 require "src/TimerManager"
 
+local renoise_config_model = {
+  AudioIO = {
+    BufferLengths = { BufferLength = 0 },
+    NumberOfBuffers = { NumberOfBuffer = 0 },
+    SampleRates = { SampleRate = 0 },
+  },
+  PlayerPrefs = {
+    RecordExtraInputLatency = 0
+  }
+}
+
+local function parse_renoise_config()
+  local version = renoise.RENOISE_VERSION:match("^%d+%.%d+%.%d+")
+  local config_path
+
+  if os.platform() == "MACINTOSH" then
+    local home = os.getenv("HOME")
+    config_path = home and ("%s/Library/Preferences/Renoise/V%s/Config.xml"):format(home, version)
+  elseif os.platform() == "LINUX" then
+    local home = os.getenv("HOME")
+    config_path = home and ("%s/.config/Renoise/V%s/Config.xml"):format(home, version)
+  elseif os.platform() == "WINDOWS" then
+    local home = os.getenv("USERPROFILE")
+    config_path = home and ("%s\\AppData\\Roaming\\Renoise\\V%s\\Config.xml"):format(home, version)
+  end
+
+  if not config_path then return end
+
+  local doc = renoise.Document.create("RenoisePrefs")(renoise_config_model)
+  if not doc:load_from(config_path) then return nil end
+  return doc
+end
+
+local function get_latency_ms()
+  local conf = parse_renoise_config()
+  if not conf then return end
+  local buffer_length = conf:property("AudioIO"):property("BufferLengths"):property("BufferLength")
+  local buffer_count = conf:property("AudioIO"):property("NumberOfBuffers"):property("NumberOfBuffer")
+  local extra_latency = conf:property("PlayerPrefs"):property("RecordExtraInputLatency")
+  return ((buffer_length * buffer_count * 2) + extra_latency)
+end
+
+local function get_latency_samples()
+  local conf = parse_renoise_config()
+  if not conf then return end
+  local buffer_length = conf:property("AudioIO"):property("BufferLengths"):property("BufferLength")
+  local buffer_count = conf:property("AudioIO"):property("NumberOfBuffers"):property("NumberOfBuffer")
+  local sample_rate = conf:property("AudioIO"):property("SampleRates"):property("SampleRate")
+  local extra_latency = conf:property("PlayerPrefs"):property("RecordExtraInputLatency")
+  return ((buffer_length * buffer_count * 2) + extra_latency) / 1000 * sample_rate
+end
+
 class "Recorder"
 
 Recorder.default_recording_params = {
