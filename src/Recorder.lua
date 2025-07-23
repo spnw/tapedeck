@@ -1,5 +1,7 @@
 local util = require "src/util"
 
+require "src/TimerManager"
+
 class "Recorder"
 
 Recorder.default_recording_params = {
@@ -14,6 +16,7 @@ Recorder.placeholder_name = "[TapeDeck is recording]"
 function Recorder:__init(context)
   self.context = context
   self.column_mute_state = {}
+  self.tm = TimerManager()
 
   if self.context.song.transport.sample_recording then
     self.error = "TapeDeck: Failed to record (recorder is already active)"
@@ -25,7 +28,6 @@ function Recorder:__init(context)
   self:add_instrument_notifier()
 
   self:mute_columns()
-  self.watchdog = Watchdog(self, 100)
   self:start_recording()
 
   self.is_initialized = true
@@ -80,6 +82,35 @@ function Recorder:unmute_columns()
   end
 end
 
+function Recorder:start_watchdog()
+  local tm = self.tm
+  local ctx = self.context
+
+  tm:schedule(100,
+    function()
+      if ctx.song.transport.sample_recording then
+        -- If we're recording, keep waiting.
+        return true
+      end
+
+      -- Recording has finished.
+      if ctx.recording_params.sync_enabled then
+        ctx.song.transport:stop()
+      end
+
+      tm:schedule(100,
+        function()
+          if self.instrument.name:match("^Recorded Sample %d+$") then
+            -- The instrument's name has changed.
+            self:fixup_instrument()
+            self:cleanup(true)
+          else
+            self:cleanup(false)
+          end
+        end)
+    end)
+end
+
 function Recorder:start_recording()
   self.context.song.transport.sample_recording_sync_enabled = self.context.recording_params.sync_enabled
   self.old_precount_setting = self.context.song.transport.metronome_precount_enabled
@@ -91,7 +122,7 @@ function Recorder:start_recording()
   if self.context.recording_params.sync_enabled then
     self.context.song.transport:start(renoise.Transport.PLAYMODE_RESTART_PATTERN)
   end
-  self.watchdog:start()
+  self:start_watchdog()
 end
 
 function Recorder:stop_recording()
@@ -136,7 +167,7 @@ function Recorder:cleanup(keep_instrument)
   end
 
   self.context.song.transport.metronome_precount_enabled = self.old_precount_setting
-  self.watchdog:stop()
+  self.tm:cancel_all()
   util.hide_recorder()
   self:unmute_columns()
 
@@ -146,55 +177,5 @@ end
 
 -- Make a hasty exit (e.g. when new song invalidates our context)
 function Recorder:terminate()
-  self.watchdog:stop()
-end
-
-function Recorder:wait_for_instrument()
-  local max_attempts = 2
-
-  if not self.is_waiting_for_instrument then
-    self.is_waiting_for_instrument = true
-    self.attempts = 1
-  end
-
-  if self.instrument.name:match("^Recorded Sample %d+$") then
-    -- The instrument's name has changed.
-    self:fixup_instrument()
-    self:cleanup(true)
-  else
-    if self.attempts == max_attempts then
-      self:cleanup(false)
-    else
-      self.attempts = self.attempts + 1
-    end
-  end
-end
-
-class "Watchdog"
-
-function Watchdog:__init(recorder, interval)
-  self.interval = interval
-  self.fn = function()
-    if recorder.is_waiting_for_instrument then
-      recorder:wait_for_instrument()
-    else
-      if recorder.context.song.transport.sample_recording then
-        return
-      end
-      if recorder.context.recording_params.sync_enabled then
-        recorder.context.song.transport:stop()
-      end
-      recorder:wait_for_instrument()
-    end
-  end
-end
-
-function Watchdog:start()
-  renoise.tool():add_timer(self.fn, self.interval)
-end
-
-function Watchdog:stop()
-  if renoise.tool():has_timer(self.fn) then
-    renoise.tool():remove_timer(self.fn)
-  end
+  self.tm:cancel_all()
 end
