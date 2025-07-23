@@ -51,7 +51,7 @@ local function get_latency_samples()
   local buffer_count = conf:property("AudioIO"):property("NumberOfBuffers"):property("NumberOfBuffer")
   local sample_rate = conf:property("AudioIO"):property("SampleRates"):property("SampleRate")
   local extra_latency = conf:property("PlayerPrefs"):property("RecordExtraInputLatency")
-  return ((buffer_length * buffer_count * 2) + extra_latency) / 1000 * sample_rate
+  return util.round(((buffer_length * buffer_count * 2) + extra_latency) / 1000 * sample_rate)
 end
 
 class "Recorder"
@@ -61,6 +61,7 @@ Recorder.default_recording_params = {
   channel_mode = "L+R",
   latency_mode = "Live Recording Mode",
   sync_enabled = false,
+  monitor_enabled = true,
 }
 
 Recorder.placeholder_name = "[TapeDeck is recording]"
@@ -137,8 +138,9 @@ end
 function Recorder:start_watchdog()
   local tm = self.tm
   local ctx = self.context
+  local delay = math.max(100, (get_latency_ms() or 0))
 
-  tm:schedule(100,
+  tm:schedule(delay,
     function()
       if ctx.song.transport.sample_recording then
         -- If we're recording, keep waiting.
@@ -150,7 +152,7 @@ function Recorder:start_watchdog()
         ctx.song.transport:stop()
       end
 
-      tm:schedule(100,
+      tm:schedule(delay,
         function()
           if self.instrument.name:match("^Recorded Sample %d+$") then
             -- The instrument's name has changed.
@@ -181,18 +183,31 @@ function Recorder:stop_recording()
   self.context.song.transport:stop_sample_recording()
 end
 
-function Recorder:convert_to_mono(channel)
+function Recorder:process_sample(channel, offset)
+  -- Stereo, uncompensated audio doesn't need processing.
+  if not channel and (offset == 0) then return end
+
   local ins = self.instrument
   if not ins then return end
   local s1 = ins.samples[1]
   local b1 = s1.sample_buffer
   local s2 = ins:insert_sample_at(2)
   local b2 = s2.sample_buffer
-  b2:create_sample_data(b1.sample_rate, b1.bit_depth, 1, b1.number_of_frames)
+  b2:create_sample_data(b1.sample_rate, b1.bit_depth, channel and 1 or 2, (b1.number_of_frames + offset))
   b2:prepare_sample_data_changes(true)
-  for frame = 1, b2.number_of_frames do
-    b2:set_sample_data(1, frame, b1:sample_data(channel, frame))
+  if channel then
+    -- Mono
+    for frame = 1, b1.number_of_frames do
+      b2:set_sample_data(1, (frame + offset), b1:sample_data(channel, frame))
+    end
+  else
+    -- Stereo
+    for frame = 1, b1.number_of_frames do
+      b2:set_sample_data(1, (frame + offset), b1:sample_data(1, frame))
+      b2:set_sample_data(2, (frame + offset), b1:sample_data(2, frame))
+    end
   end
+
   b2:finalize_sample_data_changes()
   self.instrument:delete_sample_at(1)
 end
@@ -200,10 +215,23 @@ end
 function Recorder:fixup_instrument()
   local name = ("%s [%s]"):format(self.name, os.date("%Y-%m-%d %H:%M:%S"))
   self.instrument.name = name
+
+  local offset
+  if not self.context.recording_params.monitor_enabled then
+    offset = get_latency_samples()
+    if not offset then
+      renoise.app():show_warning("TapeDeck failed to get latency info. Recording will not be latency-compensated.")
+      offset = 0
+    end
+  else
+    offset = 0
+  end
   if self.context.recording_params.channel_mode == "L" then
-    self:convert_to_mono(1)
+    self:process_sample(1, offset)
   elseif self.context.recording_params.channel_mode == "R" then
-    self:convert_to_mono(2)
+    self:process_sample(2, offset)
+  else
+    self:process_sample(nil, offset)
   end
   local sample = self.instrument.samples[1]
   sample.name = name

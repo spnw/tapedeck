@@ -19,6 +19,10 @@ local function parse_param_string(s)
       params.sync_enabled = true
     elseif char == "u" then
       params.sync_enabled = false
+    elseif char == "+" then
+      params.monitor_enabled = true
+    elseif char == "-" then
+      params.monitor_enabled = false
     end
   end
 
@@ -98,12 +102,15 @@ function TapeDeck:record()
     self.monitor:cleanup()
     self.monitor = nil
   end
-  self.monitor, err = util.ensure_init(Monitor(self.context, manual))
-  if not self.monitor then return err end
+
+  if self.context.recording_params.monitor_enabled then
+    self.monitor, err = util.ensure_init(Monitor(self.context, manual))
+    if not self.monitor then return err end
+  end
 
   self.recorder, err = util.ensure_init(Recorder(self.context))
   if not self.recorder then
-    if not self.monitor.was_created_manually then
+    if self.monitor and not self.monitor.was_created_manually then
       self.monitor:cleanup()
       self.monitor = nil
     end
