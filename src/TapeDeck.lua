@@ -41,10 +41,8 @@ local function get_recording_params(song, track, child_params)
   local _, s = util.split_name_and_params(track.name)
   local params = parse_param_string(s)
 
-  local parent
-  if track.type == renoise.Track.TRACK_TYPE_MASTER then
-    parent = nil
-  else
+  local parent = nil
+  if track.type ~= renoise.Track.TRACK_TYPE_MASTER then
     parent = track.group_parent or util.get_master_track(song)
   end
   return get_recording_params(song, parent, util.merge_tables(params, child_params))
