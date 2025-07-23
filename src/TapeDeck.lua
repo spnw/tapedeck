@@ -79,7 +79,8 @@ end
 
 function TapeDeck:maybe_delete_monitor()
   if self.monitor and not self.monitor.was_created_manually then
-    self.monitor = self.monitor:cleanup()
+    self.monitor:cleanup()
+    self.monitor = nil
   end
 end
 
@@ -97,6 +98,7 @@ function TapeDeck:record()
     -- track we're trying to record on?
     manual = (self.monitor.was_created_manually and rawequal(self.monitor.context.track, self.context.track))
     self.monitor:cleanup()
+    self.monitor = nil
   end
   self.monitor, err = util.ensure_init(Monitor(self.context, manual))
   if not self.monitor then return err end
@@ -104,7 +106,8 @@ function TapeDeck:record()
   self.recorder, err = util.ensure_init(Recorder(self.context))
   if not self.recorder then
     if not self.monitor.was_created_manually then
-      self.monitor = self.monitor:cleanup()
+      self.monitor:cleanup()
+      self.monitor = nil
     end
     return err
   end
@@ -115,7 +118,8 @@ function TapeDeck:add_song_release_notifier()
   self.song_release_notifier = function()
     self.monitor = nil
     if self.recorder then
-      self.recorder = self.recorder:terminate()
+      self.recorder:terminate()
+      self.recorder = nil
     end
     self.context = nil
   end
@@ -131,7 +135,8 @@ function TapeDeck:toggle_monitor()
   self:reset_context()
   if self.monitor then
     local same_track = rawequal(self.monitor.context.track, self.context.track)
-    self.monitor = self.monitor:cleanup()
+    self.monitor:cleanup()
+    self.monitor = nil
     if same_track then return end
   end
 
