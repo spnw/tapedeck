@@ -114,8 +114,6 @@ function Recorder:convert_to_mono(channel)
   self.instrument:delete_sample_at(1)
 end
 
-print(os.date("%Y-%m-%d %H:%M:%S"))
-
 function Recorder:fixup_instrument()
   local name = ("%s [%s]"):format(self.name, os.date("%Y-%m-%d %H:%M:%S"))
   self.instrument.name = name
