@@ -2,7 +2,7 @@
 <RenoiseScriptingTool doc_version="0">
   <ApiVersion>6.2</ApiVersion>
   <Id>org.plexwave.TapeDeck</Id>
-  <Version>0.2.0</Version>
+  <Version>0.2.1</Version>
   <Author>Spencer Williams [spnw@plexwave.org]</Author>
   <Name>TapeDeck</Name>
   <Category>Recording</Category>

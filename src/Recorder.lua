@@ -156,8 +156,7 @@ function Recorder:start_watchdog()
         function()
           if self.instrument.name:match("^Recorded Sample %d+$") then
             -- The instrument's name has changed.
-            self:fixup_instrument()
-            self:cleanup(true)
+            self:cleanup(self:fixup_instrument())
           else
             self:cleanup(false)
           end
@@ -185,7 +184,7 @@ end
 
 function Recorder:process_sample(channel, offset)
   -- Stereo, uncompensated audio doesn't need processing.
-  if not channel and (offset == 0) then return end
+  if not channel and (offset == 0) then return true end
 
   local ins = self.instrument
   if not ins then return end
@@ -193,23 +192,29 @@ function Recorder:process_sample(channel, offset)
   local b1 = s1.sample_buffer
   local s2 = ins:insert_sample_at(2)
   local b2 = s2.sample_buffer
-  b2:create_sample_data(b1.sample_rate, b1.bit_depth, channel and 1 or 2, (b1.number_of_frames + offset))
+  local length = (b1.number_of_frames - offset)
+  if length < 1 then
+    -- Recording is shorter than offset
+    return false
+  end
+  b2:create_sample_data(b1.sample_rate, b1.bit_depth, channel and 1 or 2, length)
   b2:prepare_sample_data_changes(true)
   if channel then
     -- Mono
-    for frame = 1, b1.number_of_frames do
-      b2:set_sample_data(1, (frame + offset), b1:sample_data(channel, frame))
+    for frame = 1, b2.number_of_frames do
+      b2:set_sample_data(1, frame, b1:sample_data(channel, (frame + offset)))
     end
   else
     -- Stereo
-    for frame = 1, b1.number_of_frames do
-      b2:set_sample_data(1, (frame + offset), b1:sample_data(1, frame))
-      b2:set_sample_data(2, (frame + offset), b1:sample_data(2, frame))
+    for frame = 1, b2.number_of_frames do
+      b2:set_sample_data(1, frame, b1:sample_data(1, (frame + offset)))
+      b2:set_sample_data(2, frame, b1:sample_data(2, (frame + offset)))
     end
   end
 
   b2:finalize_sample_data_changes()
   self.instrument:delete_sample_at(1)
+  return true
 end
 
 function Recorder:fixup_instrument()
@@ -226,17 +231,23 @@ function Recorder:fixup_instrument()
   else
     offset = 0
   end
+
+  local result
   if self.context.recording_params.channel_mode == "L" then
-    self:process_sample(1, offset)
+    result = self:process_sample(1, offset)
   elseif self.context.recording_params.channel_mode == "R" then
-    self:process_sample(2, offset)
+    result = self:process_sample(2, offset)
   else
-    self:process_sample(nil, offset)
+    result = self:process_sample(nil, offset)
   end
+  if not result then return false end
+
   local sample = self.instrument.samples[1]
   sample.name = name
   sample.autoseek = true
   sample.autofade = true
+
+  return true
 end
 
 function Recorder:cleanup(keep_instrument)
