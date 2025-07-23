@@ -157,9 +157,8 @@ function Recorder:wait_for_instrument()
     self.attempts = 1
   end
 
-  if self.instrument.name ~= Recorder.placeholder_name then
-    -- The instrument's name has changed.  TODO: Make sure it matches
-    -- the pattern "Recorded Sample %d+".
+  if self.instrument.name:match("^Recorded Sample %d+$") then
+    -- The instrument's name has changed.
     self:fixup_instrument()
     self:cleanup(true)
   else
